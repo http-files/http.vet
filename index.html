@@ -96,8 +96,11 @@
   .cell {
     font: inherit; font-size: 12px;
     background: none; border: 1px solid transparent; border-radius: 3px;
-    padding: 2px 10px; cursor: pointer; width: 100%; text-align: left;
+    padding: 2px 10px; cursor: pointer; text-align: left;
   }
+  /* the fold outweighs its parts: feature and release cells fill the column,
+     probe cells hug their word */
+  tr.feature .cell, tr.summary .cell { display: block; width: 100%; }
   .cell.v-ok   { color: var(--ok);   background: rgba(70,194,142,.07); border-color: rgba(70,194,142,.25); }
   .cell.v-warn { color: var(--warn); background: rgba(227,166,59,.07); border-color: rgba(227,166,59,.28); }
   .cell.v-bad  { color: var(--bad);  background: rgba(229,83,75,.07);  border-color: rgba(229,83,75,.28); }
