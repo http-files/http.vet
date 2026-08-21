@@ -1,0 +1,16 @@
+/* masthead: which corpus this is, what the colours mean, what the keys do */
+
+.meta { margin-bottom: 18px; }
+.keys { margin-bottom: 22px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); margin-bottom: 8px; font-size: 12px; }
+/* the sentences sit on their own row: interleaved with chips, a trailing
+   chip reads as the end of the sentence before it */
+.legend.note { color: var(--faint); margin-bottom: 10px; column-gap: 22px; }
+.legend.note span + span::before { content: "· "; color: var(--line); }
+.legend .chip::before { content: "■ "; }
+.legend .c-ok::before   { color: var(--ok); }
+.legend .c-warn::before { color: var(--warn); }
+.legend .c-bad::before  { color: var(--bad); }
+.legend .c-info::before { color: var(--info); }
+.legend .c-mut::before  { color: var(--faint); }

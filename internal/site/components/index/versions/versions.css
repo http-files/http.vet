@@ -1,0 +1,51 @@
+/* versions: one block per corpus version, and inside each a column per
+   release. What a score looks like is the shared styles' — this file is only
+   the arrangement around it. */
+
+.v { border: 1px solid var(--line); background: var(--panel); margin-bottom: 22px; }
+.v.latest { border-color: #33414e; }
+.vhead {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; background: var(--panel-2); border-bottom: 1px solid var(--line);
+}
+.vhead .name { font-size: 14px; color: var(--text); }
+.vhead .tag {
+  font-size: 11px; color: var(--bg); background: var(--ok);
+  padding: 1px 7px; border-radius: 2px; letter-spacing: .04em;
+}
+.vhead .frozen { font-size: 11px; color: var(--faint); border: 1px solid var(--line); padding: 0 6px; border-radius: 2px; }
+.vhead .grow { margin-left: auto; }
+.vhead .pin { color: var(--faint); font-size: 12px; }
+.empty { padding: 18px 16px; color: var(--muted); }
+
+/* ── one column per release, plus the features no release has claimed ───── */
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 16px; white-space: nowrap; vertical-align: top; }
+td { border-bottom: 1px solid #1c242c; }
+tr:last-child td { border-bottom: 0; }
+.cv { color: var(--muted); }
+.nover { color: var(--faint); }
+
+thead th { border-bottom: 1px solid var(--line); font-weight: 400; }
+/* the head itself is the shared .rel-head; a column is narrower than a section
+   band, so the note it trails drops to its own line instead of the label's */
+thead th.rel-head { padding-bottom: 10px; }
+th.rel-head .rel-note {
+  display: block; margin-left: 0; max-width: 21ch; white-space: normal;
+}
+th.rel-head .rel-note::before { content: none; }
+th .b-sub { color: var(--faint); font-size: 11px; display: block; }
+th .b-conform { color: var(--muted); font-size: 11px; display: block; }
+th.who { color: var(--faint); font-size: 11px; letter-spacing: .04em; }
+.col-rest { border-left: 1px solid var(--line); }
+
+/* the table still scrolls inside .tablewrap at any width — this only buys
+   back enough room that it usually does not have to */
+@media (max-width: 900px) {
+  th, td { padding: 8px 10px; }
+  .bar { width: 62px; }
+  .vhead { gap: 8px; }
+  .vhead .grow { margin-left: 0; flex-basis: 100%; }
+}

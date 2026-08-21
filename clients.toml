@@ -1,0 +1,68 @@
+# Client registry — what each graded client *is*, for display only.
+#
+# Deliberately not part of drivers/*.toml. A driver manifest is hashed whole
+# and that hash is pinned into every report it produced, so a URL recorded
+# there would mark every lane changed-since-its-run without changing a single
+# graded state. Here it costs no pin.
+#
+# Keyed by driver id. `name` is the client's own name for itself; `docs` is
+# that client's guide to the `.http` language — how it documents the format a
+# column grades it on, not how to install or invoke it. Where a client
+# publishes no such guide the field is absent. Each URL is its terminal form:
+# fetched, 200, no redirect hop. Nothing here reaches the recompute path —
+# `verify` never reads this file.
+#
+# Neutrality: every lane is listed on the same terms, including our own.
+#
+# `lanes` is the canonical column order — adoption order, oldest first. It is
+# data because intake is a directory of submitted reports, not an argument
+# list: without it, column order would follow whatever order the filesystem
+# happened to return. A lane must appear here to be rendered, so adding a
+# column is an edit to this file, reviewed like any other.
+
+lanes = [
+  "ijhttp",
+  "httpyac",
+  "kulala",
+  "resterm",
+  "dotnet-httpie",
+  "httprunner",
+  "req",
+]
+
+[client.ijhttp]
+name = "JetBrains HTTP Client CLI"
+docs = "https://www.jetbrains.com/help/idea/exploring-http-syntax.html"
+
+[client.httpyac]
+name = "httpyac CLI"
+docs = "https://httpyac.github.io/guide/request.html"
+
+# kulala-core is the engine shared by kulala.nvim, kulala.vscode and the CLI,
+# so its format guide is the one this lane is graded against
+[client.kulala]
+name = "Kulala CLI"
+docs = "https://kulala.app/usage/http-file-format"
+
+[client.resterm]
+name = "Resterm"
+docs = "https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md"
+
+# blob URL on the `dev` branch — upstream keeps its docs there, so this moves
+# if that branch is renamed
+[client.dotnet-httpie]
+name = "dotnet-httpie"
+docs = "https://github.com/WeihanLi/dotnet-httpie/blob/dev/docs/articles/http-requests.md"
+
+# christianhelle/httprunner, the Rust CLI — not the unrelated Python project
+# of the same name
+[client.httprunner]
+name = "HTTP File Runner"
+docs = "https://christianhelle.com/httprunner/guide.html"
+
+# req is the swift-http-files CLI, graded from source with no special
+# standing. The library is pre-release and its repository is not public, so
+# there is no guide to link — this entry records that absence rather than
+# leaving the lane looking overlooked.
+[client.req]
+name = "req (swift-http-files)"

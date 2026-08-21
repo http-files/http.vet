@@ -1,0 +1,1144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>http.vet · .http standardization</title>
+<style>
+/* The design system. Every page here is the same page at a different width:
+   monospace, dark, one accent per verdict, and enough `#` marks in the chrome
+   that the page reads as the format it grades. Nothing below describes a
+   result — that is evidence.css — and nothing describes one page's layout,
+   which each page carries itself. */
+
+:root {
+  --bg: #10151a;
+  --panel: #151b21;
+  --panel-2: #1a2129;
+  --line: #242d36;
+  --text: #d6dee6;
+  --muted: #7d8b98;
+  --faint: #4b5763;
+
+  /* the four verdicts — the only colours on any page that mean something */
+  --ok: #46c28e;
+  --warn: #e3a63b;
+  --bad: #e5534b;
+  --info: #7fb0e8;
+
+  /* observe groups: one colour per distinct reading. Blues, violets, pinks
+     and cyans only — an observed value is not a verdict, so none of these may
+     be mistaken for --ok, --warn or --bad. */
+  --g0: #7fb0e8; --g1: #b58cf0; --g2: #ef8fc0; --g3: #4fb8dd;
+  --g4: #9aa0ee; --g5: #d98fe0; --g6: #86b3c9; --g7: #c2a0cf;
+
+  /* wire spans: the parts of a request a reader picks out of the bytes */
+  --t-method: #8cc7ff;
+  --t-target: #c9b3ff;
+  --t-hname: #7fd4c1;
+  --t-body: #e8c77d;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* the body measure; a page whose content is wider raises it */
+  --measure: 1180px;
+  /* how far a sticky header intrudes. Anything scrolled into view keeps this
+     much clear, so a page without a sticky header leaves it alone. */
+  --stick: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
+body {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  padding: 28px 32px 64px;
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+a { color: var(--info); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* the markdown-ish punctuation the chrome is built from: ###, #, ## */
+.h { color: var(--faint); }
+
+.mast { margin-bottom: 4px; font-size: 15px; }
+/* a masthead link is the title it sits in, not a link in a sentence */
+.mast a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--faint); }
+.mast a:hover { color: var(--text); border-bottom-color: var(--muted); }
+
+/* the run this page is of: client, corpus, date. Bold is the identifying
+   part, everything else is the sentence around it. */
+.meta { color: var(--muted); }
+.meta b { color: var(--text); font-weight: 500; }
+.meta .cv { color: var(--text); }
+
+.keys { color: var(--faint); font-size: 12px; }
+.keys kbd {
+  color: var(--muted); font: inherit;
+  border: 1px solid var(--line); border-radius: 2px; padding: 0 4px;
+}
+
+footer { margin-top: 40px; color: var(--faint); font-size: 12px; }
+
+@media (max-width: 860px) {
+  body { padding: 16px 12px 48px; }
+}
+
+/* What a result looks like. A state chip, a panel, the bytes inside it and the
+   prose beside them are the same objects on every page — only how many of them
+   stand side by side changes — so they are described once, here.
+
+   The verdict is carried as a custom property rather than a colour per rule:
+   an element tagged .v-bad sets --v, and its chip, its panel border and the
+   state word in its head all read that one value. A panel and the chip that
+   opened it are the same colour by construction. */
+
+.v-ok   { --v: var(--ok); }
+.v-warn { --v: var(--warn); }
+.v-bad  { --v: var(--bad); }
+.v-info { --v: var(--info); }
+.v-mut  { --v: var(--muted); }
+
+/* ── the state chip ─────────────────────────────────────────────────────── */
+
+.cell {
+  font: inherit; font-size: 12px;
+  color: var(--v, var(--text));
+  background: color-mix(in srgb, var(--v) 7%, transparent);
+  /* the colour is a second declaration so an untagged chip keeps the box */
+  border: 1px solid transparent;
+  border-color: color-mix(in srgb, var(--v) 28%, transparent);
+  border-radius: 3px; padding: 2px 7px; text-align: left;
+  /* a long observed value ellipsizes in its column; the whole of it is in the
+     panel the chip opens */
+  display: inline-block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  scroll-margin-top: var(--stick);
+}
+/* mut is the absence of a verdict — unsupported, untestable, no reading at
+   all — so the chip recedes to an outline rather than taking a fill beside
+   the states that mean something */
+.cell.v-mut { background: none; border-color: var(--line); }
+button.cell { cursor: pointer; }
+button.cell:hover { border-color: var(--muted); }
+button.cell:focus-visible, button.cell.selected {
+  outline: 1.5px solid var(--text); outline-offset: 1px;
+}
+
+/* ── the panel ──────────────────────────────────────────────────────────── */
+
+.panel {
+  position: relative; background: var(--bg);
+  border: 1px solid var(--line); border-left: 2px solid var(--v, var(--line));
+  padding: 16px 18px 18px;
+  scroll-margin-top: var(--stick);
+}
+/* the caret points back up at the chip that opened the panel */
+.caret {
+  position: absolute; top: -7px; left: var(--caret, 50%);
+  width: 0; height: 0; margin-left: -6px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-bottom: 6px solid var(--muted);
+}
+.p-close {
+  position: absolute; top: 10px; right: 12px;
+  font: inherit; color: var(--faint); background: none; border: 0; cursor: pointer;
+}
+.p-close:hover { color: var(--text); }
+.p-head { font-size: 14px; padding-right: 24px; }
+.p-head .at { color: var(--faint); }
+.p-head .st { color: var(--v); }
+.p-title { color: var(--muted); font-size: 12px; }
+.p-state { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+.dim { color: var(--faint); font-size: 12px; }
+/* ── the answer: one line per finding, mark / anchor / comparison ────────── */
+
+.answer { margin: 8px 0 0; }
+.arow { display: grid; grid-template-columns: 1em max-content 1fr; gap: 0 10px; align-items: baseline; }
+.amark.fail  { color: var(--bad); }
+.amark.quirk { color: var(--warn); }
+.amark.obs   { color: var(--info); }
+.aid { color: var(--text); }
+.aval { color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.aval .arrow { color: var(--faint); }
+/* the span that actually differs */
+.dx-want { background: color-mix(in srgb, var(--muted) 26%, transparent); border-radius: 2px; }
+.dx-got  { background: color-mix(in srgb, var(--bad) 24%, transparent); border-radius: 2px; }
+.quirk .dx-got { background: color-mix(in srgb, var(--warn) 24%, transparent); }
+
+/* ── evidence: inline under the answer, nothing hidden behind a click ───── */
+
+.evidence { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.evidence > * + * { margin-top: 14px; }
+
+.a-kind { color: var(--faint); font-size: 11px; margin-left: 8px; }
+.prose { color: var(--muted); margin: 2px 0 8px; max-width: 92ch; }
+.prose code { color: var(--text); }
+.prose .xref {
+  font: inherit; background: none; border: 0; padding: 0;
+  color: var(--info); border-bottom: 1px dotted var(--info); cursor: pointer;
+}
+.prose .xref:hover { color: var(--text); border-bottom-color: var(--text); }
+
+/* document beside wire: what the client was handed, what it sent.
+   min() lets the last remaining track shrink under its ideal width — a panel
+   narrower than 340px scrolls its own pre boxes, never the page */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 18px; }
+.cols > * { min-width: 0; }
+
+.x-label { color: var(--faint); font-size: 11px; margin: 8px 0 3px; }
+.x-label:first-child { margin-top: 0; }
+.x-label .dir { color: var(--muted); }
+
+pre.wire, pre.doc, pre.out {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+  padding: 8px 10px; line-height: 1.5;
+  white-space: pre; font-family: var(--mono); font-size: 12.5px;
+  /* a runaway body or log scrolls inside its own box, not the page;
+     position anchors offsetTop so the box can scroll itself to a .hl */
+  position: relative; max-height: 320px; overflow: auto;
+}
+pre.out { white-space: pre-wrap; word-break: break-word; color: var(--muted); font-size: 12px; }
+pre.wire.rx { color: var(--muted); }
+pre.doc.star { color: var(--muted); }
+pre .hl { display: block; background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--text); }
+.k-method  { color: var(--t-method); }
+.k-target  { color: var(--t-target); }
+.k-version { color: var(--muted); }
+.k-hname   { color: var(--t-hname); }
+.k-body    { color: var(--t-body); }
+.ctl { color: var(--faint); }
+
+.notes { color: var(--muted); font-size: 12px; margin-top: 10px; }
+.notes li { list-style: none; }
+.notes li::before { content: "· "; }
+
+/* ── the release section header ──────────────────────────────────────────
+   One release, named the same wherever results are grouped by it: the marker,
+   the label, then the status and the note trailing it as one muted clause.
+   Vertical rhythm belongs to the page — a row in a table and a heading in a
+   flow sit differently — the words and their weights do not. text-align is set
+   because the element may be a `th`, which would otherwise centre it. */
+
+.rel-head {
+  font-size: 14px; font-weight: 500; color: var(--text); text-align: left;
+  scroll-margin-top: var(--stick);
+}
+.rel-head .h { font-weight: 400; }
+.rel-head .rel-status, .rel-head .rel-note {
+  color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 10px;
+}
+.rel-head .rel-status::before, .rel-head .rel-note::before { content: "· "; }
+
+/* ── the score row: a bar carries a verdict, not a temperature ───────────── */
+
+.score { display: flex; align-items: center; gap: 9px; }
+.bar { width: 104px; height: 7px; background: var(--line); flex: none; }
+.bar i { display: block; height: 100%; background: var(--ok); }
+.bar.p-warn i { background: var(--warn); }
+.bar.p-bad  i { background: var(--bad); }
+.pct { font-variant-numeric: tabular-nums; width: 3.4em; text-align: right; }
+.of { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* nothing graded, so no bar. Named for the row it stands in: a page is free to
+   use a bare adjective as its own modifier, the shared layer is not. */
+.no-score { color: var(--faint); }
+
+@media (max-width: 860px) {
+  /* the anchor takes its own line so the reading keeps the full width */
+  .arow { grid-template-columns: 1em minmax(0, 1fr); }
+  .arow .aval { grid-column: 2; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cell { transition: border-color .12s ease; }
+}
+
+/* masthead: what this page is asking, and how current its answer is */
+
+.meta { margin-bottom: 24px; }
+
+/* versions: one block per corpus version, and inside each a column per
+   release. What a score looks like is the shared styles' — this file is only
+   the arrangement around it. */
+
+.v { border: 1px solid var(--line); background: var(--panel); margin-bottom: 22px; }
+.v.latest { border-color: #33414e; }
+.vhead {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; background: var(--panel-2); border-bottom: 1px solid var(--line);
+}
+.vhead .name { font-size: 14px; color: var(--text); }
+.vhead .tag {
+  font-size: 11px; color: var(--bg); background: var(--ok);
+  padding: 1px 7px; border-radius: 2px; letter-spacing: .04em;
+}
+.vhead .frozen { font-size: 11px; color: var(--faint); border: 1px solid var(--line); padding: 0 6px; border-radius: 2px; }
+.vhead .grow { margin-left: auto; }
+.vhead .pin { color: var(--faint); font-size: 12px; }
+.empty { padding: 18px 16px; color: var(--muted); }
+
+/* ── one column per release, plus the features no release has claimed ───── */
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 8px 16px; white-space: nowrap; vertical-align: top; }
+td { border-bottom: 1px solid #1c242c; }
+tr:last-child td { border-bottom: 0; }
+.cv { color: var(--muted); }
+.nover { color: var(--faint); }
+
+thead th { border-bottom: 1px solid var(--line); font-weight: 400; }
+/* the head itself is the shared .rel-head; a column is narrower than a section
+   band, so the note it trails drops to its own line instead of the label's */
+thead th.rel-head { padding-bottom: 10px; }
+th.rel-head .rel-note {
+  display: block; margin-left: 0; max-width: 21ch; white-space: normal;
+}
+th.rel-head .rel-note::before { content: none; }
+th .b-sub { color: var(--faint); font-size: 11px; display: block; }
+th .b-conform { color: var(--muted); font-size: 11px; display: block; }
+th.who { color: var(--faint); font-size: 11px; letter-spacing: .04em; }
+.col-rest { border-left: 1px solid var(--line); }
+
+/* the table still scrolls inside .tablewrap at any width — this only buys
+   back enough room that it usually does not have to */
+@media (max-width: 900px) {
+  th, td { padding: 8px 10px; }
+  .bar { width: 62px; }
+  .vhead { gap: 8px; }
+  .vhead .grow { margin-left: 0; flex-basis: 100%; }
+}
+
+/* The root page's own layout: a masthead, the lede that says what the columns
+   mean, and a block per corpus version. What a score looks like is the shared
+   styles'; what a version block looks like is that component's. */
+
+/* fewer columns than any other page here, and spreading them apart only makes
+   a row harder to read across */
+:root { --measure: 1120px; }
+
+.lede { color: var(--muted); margin-bottom: 16px; max-width: 74ch; }
+.lede b { color: var(--text); font-weight: 500; }
+.lede:last-of-type { margin-bottom: 30px; }
+
+footer { border-top: 1px solid var(--line); padding-top: 12px; }
+
+@media (max-width: 900px) {
+  body { padding: 20px 14px 48px; }
+}
+
+</style>
+</head>
+<body>
+<header data-c="masthead">
+  <div class="mast"><span class="h">### </span>http.vet</div>
+  <div class="meta">
+    <span class="h"># </span>how the <b>.http</b> standard is progressing
+    · latest run <b class="date"></b>
+  </div>
+</header>
+
+
+<p class="lede">
+  A release of <b>.http</b> is a selection of features. This page reads down
+  each selection and asks whether it holds: a column every client clears is a
+  year's wording that has settled, and a ragged one is a year still being
+  argued. The last column is every feature no release has claimed — where the
+  disagreement that decides the next selection is still visible.
+</p>
+<p class="lede">
+  Results come from <b>httpvet</b>. Each report embeds the wire evidence its
+  client produced, and every state on this page is derived from that evidence
+  by the kit's current check scripts when the page is built. A report is the
+  record; the scripts are the present.
+</p>
+
+<main data-c="versions"></main>
+
+
+<footer><span class="h"># </span>evidence embedded from report.json · states derived at build by the kit's check scripts
+<br><span class="h"># </span>results <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a> · page <a href="https://opensource.org/licenses/MIT">MIT</a></footer>
+
+<script>const DATA = {"generated":"2026-08-21","versions":[{"version":"2026-draft.3","kit":"0.2.0","generated":"2026-08-21","probes":84,"buckets":[{"year":"2026","label":".http 2026","status":"draft","features":6,"probes":14,"conform":7},{"year":"2027","label":".http 2027","status":"draft","features":9,"probes":6,"conform":0},{"label":"outside any release","note":"defined and tested, selected by none","features":12,"probes":50,"conform":0}],"clients":[{"id":"ijhttp","name":"JetBrains HTTP Client CLI","docs":"https://www.jetbrains.com/help/idea/exploring-http-syntax.html","version":"2026.1","runDate":"2026-08-21","total":84,"graded":70,"conforming":60,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":5},{"graded":50,"conforming":41}]},{"id":"httpyac","name":"httpyac CLI","docs":"https://httpyac.github.io/guide/request.html","version":"6.16.7","runDate":"2026-08-21","total":84,"graded":70,"conforming":62,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":5},{"graded":50,"conforming":43}]},{"id":"kulala","name":"Kulala CLI","docs":"https://kulala.app/usage/http-file-format","version":"0.14.2","runDate":"2026-08-21","total":84,"graded":70,"conforming":58,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":4},{"graded":50,"conforming":40}]},{"id":"resterm","name":"Resterm","docs":"https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md","version":"0.51.3","runDate":"2026-08-21","total":84,"graded":70,"conforming":58,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":3},{"graded":50,"conforming":41}]},{"id":"dotnet-httpie","name":"dotnet-httpie","docs":"https://github.com/WeihanLi/dotnet-httpie/blob/dev/docs/articles/http-requests.md","version":"0.17.0","runDate":"2026-08-21","total":84,"graded":70,"conforming":54,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":3},{"graded":50,"conforming":37}]},{"id":"httprunner","name":"HTTP File Runner","docs":"https://christianhelle.com/httprunner/guide.html","version":"1.1.54","runDate":"2026-08-21","total":84,"graded":70,"conforming":60,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":2},{"graded":50,"conforming":44}]},{"id":"req","name":"req (swift-http-files)","version":"0.1.0","runDate":"2026-08-21","total":84,"graded":70,"conforming":61,"scores":[{"graded":14,"conforming":14},{"graded":6,"conforming":3},{"graded":50,"conforming":44}]}]}]};</script>
+<script>
+// The directive is the whole page's, not this file's: a page's script is these
+// modules concatenated with the page's own, and dom.js is always first.
+"use strict";
+
+// The builder every page draws with. Nothing here accepts markup as a string,
+// and no page may either: client stdout, wire bytes and observed values are
+// arbitrary untrusted input, and the only durable guarantee that they cannot
+// become markup is that no code path exists to make them so.
+//
+// One signature:
+//
+//     h(tag, spec, kids) -> Element
+//
+// `spec` is a class-name string, an attribute object, or null. The string form
+// is shorthand for {class: …}, not a second signature — almost every element
+// on these pages needs only a class, and h("span", "dir", ["tx"]) is the shape
+// that keeps a renderer readable at a glance.
+//
+// Object keys: `class`, `text` (textContent), `data` (an object folded into
+// dataset), and anything else set as an attribute. `true` sets a bare
+// attribute; null, undefined and false skip the key entirely, so a conditional
+// attribute needs no branch at the call site. Children are strings, nodes or
+// fragments, and the same three falsy values skip a child — a list of children
+// can hold its own conditions.
+//
+// Global names defined here: h, frag, textNode.
+
+function h(tag, spec, kids) {
+  const el = document.createElement(tag);
+  if (typeof spec === "string") {
+    if (spec) el.className = spec;
+  } else if (spec) {
+    for (const k of Object.keys(spec)) {
+      const v = spec[k];
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "text") el.textContent = v;
+      else if (k === "data") for (const d of Object.keys(v)) el.dataset[d] = v[d];
+      else el.setAttribute(k, v === true ? "" : v);
+    }
+  }
+  for (const kid of kids || [])
+    if (kid !== null && kid !== undefined && kid !== false) el.append(kid);
+  return el;
+}
+
+// A run of nodes with no element around it — what a renderer returns when the
+// element it belongs in is the caller's to choose.
+function frag(kids) {
+  const f = document.createDocumentFragment();
+  for (const kid of kids || [])
+    if (kid !== null && kid !== undefined && kid !== false) f.append(kid);
+  return f;
+}
+
+const textNode = s => document.createTextNode(s);
+
+// Fold semantics. The verdict and fold a result wears are decided once, in Go
+// (`report.Verdict`, `report.Fold`, set on every Cell by `CellFromEntry`) and
+// travel in the data as `cell.verdict` and `cell.fold`. Nothing here decides
+// a colour: a page reads what the report says, so a single-client report and
+// a cross-client matrix cannot disagree about one. What stays in JavaScript
+// is display over those values — the worst-first order a group folds by, the
+// colour of a fold, and the one-line wordings.
+//
+// Every function is pure in its arguments: nothing reads DATA, the DOM, the
+// clock or anything else. A probe argument is used for `class` alone, so the
+// single-client and cross-client probe shapes both satisfy it.
+//
+// Global names defined here: FOLD_RANK, verdict, cellFold, foldVerdict,
+// worstFold, obsWord, stateLine, shortAnchor, why.
+
+// verdict(class, cell) -> "ok" | "warn" | "bad" | "info" | "mut"
+// The colour a result wears, as the report decided it. A null cell is real on
+// the matrix — a probe absent from one client's report — and wears "mut".
+function verdict(cls, cell) {
+  return cell ? cell.verdict : "mut";
+}
+
+// Worst-first order over Go's fold values. A group of results folds to the
+// first of these any member reaches, so the order is the whole definition of
+// "worst" — a display decision, which is why it lives here and not in Go.
+const FOLD_RANK = ["deviating", "errored", "unsupported", "quirked", "supported", "observed", "untestable"];
+
+// cellFold(probe, cell) -> one of FOLD_RANK, as the report decided it.
+function cellFold(p, cell) {
+  return cell.fold;
+}
+
+const foldVerdict = f => ({deviating: "bad", errored: "bad", unsupported: "mut",
+  quirked: "warn", supported: "ok", observed: "info", untestable: "mut"}[f]);
+
+// worstFold(folds) -> the worst fold present in an array of them, or null.
+const worstFold = folds => FOLD_RANK.find(f => folds.includes(f)) || null;
+
+// An empty observed value is a result, not missing data — say so.
+const obsWord = o => o.value === "" ? "(empty)" : o.value;
+
+// stateLine(probe, cell) -> string
+// What the kit decided, in its own vocabulary, compressed to the facts that
+// decided it. Empty when the findings shown above it already say it.
+function stateLine(p, cell) {
+  const st = cell.state, reason = cell.reason || "";
+  const conn = cell.exchanges.length ? cell.exchanges.length + " exchange" + (cell.exchanges.length > 1 ? "s" : "")
+                                     : "no connection";
+  if (cell.timedOut) return "timed out · process tree killed · " + conn;
+  if (st === "rejected") {
+    const pat = (reason.match(/matched reject pattern (\/.*\/)/) || [])[1];
+    return (pat ? "matched " + pat : "classified as refusal") + " · exit " + cell.exit + " · " + conn;
+  }
+  if (st === "errored") {
+    const bits = ["exit " + cell.exit, conn];
+    if (!cell.stdout && !cell.stderr) bits.push("no output");
+    if (reason.includes("no reject pattern matched")) bits.push("no reject pattern matched");
+    else if (reason.startsWith("check script error")) bits.push("check script error: " + reason.slice(19));
+    else if (reason.includes("authoring error")) bits.push(reason.replace(/^authoring error: /, "authoring: "));
+    else if (reason.startsWith("require gate")) bits.push(reason.replace(/^require gate: /, "require: "));
+    return bits.join(" · ");
+  }
+  if (st === "unsupported") return reason.replace(/^support gate: /, "gate: ");
+  if (st === "deviating" && reason.startsWith("require gate"))
+    return reason.replace(/^require gate: /, "require: ") + " · " + conn;
+  if (st === "supported" && p.class === "reject") return "executed it · exit " + cell.exit + " · " + conn;
+  if (st === "observed") {
+    const anchors = [...new Set(cell.observations.map(o => o.spec))];
+    if (anchors.length === 1) return anchors[0] + " = " + cell.observations.map(obsWord).join(" · ");
+    return cell.observations.map(o => o.spec + " = " + obsWord(o)).join(" · ");
+  }
+  return "";
+}
+
+// Under a feature heading the feature is fixed, so its prefix is noise.
+const shortAnchor = (a, feat) => a.startsWith(feat + "#") ? a.slice(feat.length) : a;
+
+// why(probe, cell, feature) -> string
+// A one-line reason beside a probe in a list: only what separates this probe
+// from the ones above and below it. Failed anchors when there are any, then
+// the readings, then the state line.
+function why(p, cell, feat) {
+  const failed = [...new Set(cell.checks.filter(c => !c.pass).map(c => shortAnchor(c.spec, feat)))];
+  if (failed.length) return failed.join(" ");
+  if (cell.state === "observed" && cell.observations && cell.observations.length)
+    return cell.observations.map(obsWord).join(" · ");
+  return stateLine(p, cell);
+}
+
+// Evidence renderers: the six sections a panel is assembled from, and the
+// primitives they draw with. A panel opens to answer one question — why is
+// this result that colour — so a section exists to carry one kind of proof,
+// and a page appends the ones that bear on the result it is explaining.
+//
+// ── one signature ────────────────────────────────────────────────────────
+//
+//     section*(probe, cell, client) -> Element
+//
+// probe   the corpus entry: {id, class, spec[]}
+// cell    the outcome being explained, or null where the panel explains a
+//         probe rather than a result
+// client  the lane that produced it: {id, driver?, …}
+//
+// Not every section reads all three — sectionWire reads the cell alone,
+// sectionPatterns the client's manifest alone — but a panel appends sections
+// as a list, and a caller that must remember which one takes what will
+// eventually hand one the wrong thing. Each section therefore declares the
+// whole triple, so the contract is visible where the function is, not only
+// where it is called.
+//
+// The per-page difference stays in the arguments: a single-client page holds
+// one cell per probe and one client for the whole page, a cross-client page
+// holds a cell and a client per lane. Both resolve their own and pass them.
+//
+// ── what is read from DATA ───────────────────────────────────────────────
+//
+//   DATA.docs   {probeId: ProbeDoc}  what a probe *is* — document, support
+//               files, fixtures, check source. Absent when the page was rendered without one.
+//   DATA.spec   {features, statements, order}  the normative prose an anchor
+//               cites. Absent when the page was rendered without it.
+//
+// Nothing else. Everything about a lane arrives as the `client` argument, so
+// no page needs a global for its own client and no shared function needs to
+// know how many lanes a page has.
+//
+// Global names defined here: bind, hasCorpus, probeDoc, hasSpec,
+// specStatement, specFeature, specOrder, wireText, inlineProse, proseBlocks,
+// prose, rejectRegex, rejectPatternList, diffMark, diffText, failRow, obsRow,
+// pct, grade, score, releaseHead, panelShell, panelPlaced, setHash, heldLine,
+// sectionDoc, sectionWire, sectionExchange, sectionOutput, sectionPatterns,
+// sectionSpec, sectionCheck, evidenceSections.
+
+// The page-supplied bindings. A shared renderer never queries the page's DOM
+// or calls into its state directly; where it needs to, the page says how.
+//
+//   close()      dismiss the open panel — the ✕ in every panel head calls it
+//   xref(label)  a jump function when `label` names a place on this page,
+//                null when it does not. A spec cross-reference becomes a
+//                button only where there is somewhere to go, and what counts
+//                as somewhere differs: a feature is a section on one page and
+//                a row on another.
+//   filter(state) narrow the page to one state, or to none with null. Owned
+//                by whichever component filters the page; called by one that
+//                must land somewhere the filter has hidden.
+//
+// The hooks are also how one component on a page reaches another: the
+// component that owns a behaviour binds it, the one that needs it calls
+// HOOKS. Nothing else crosses a component's edge.
+const HOOKS = {close: () => {}, xref: () => null, filter: () => {}};
+
+function bind(hooks) { Object.assign(HOOKS, hooks); }
+
+const hasCorpus = () => !!DATA.docs;
+const probeDoc = id => (DATA.docs && DATA.docs[id]) || null;
+const hasSpec = () => !!DATA.spec;
+const specStatement = anchor => (DATA.spec && DATA.spec.statements && DATA.spec.statements[anchor]) || null;
+const specFeature = id => (DATA.spec && DATA.spec.features && DATA.spec.features[id]) || null;
+const specOrder = () => (DATA.spec && DATA.spec.order) || [];
+
+// ── primitives ───────────────────────────────────────────────────────────
+
+// control bytes render visibly but dim — line endings are test material
+function wireText(text) {
+  const out = document.createDocumentFragment();
+  let plain = "";
+  const flush = () => { if (plain) { out.append(plain); plain = ""; } };
+  for (const ch of text) {
+    if (ch === "\r") { flush(); out.append(h("span", "ctl", ["␍"])); }
+    else if (ch === "\n") { flush(); out.append(h("span", "ctl", ["␊"])); out.append("\n"); }
+    else if (ch === "﻿") { flush(); out.append(h("span", "ctl", ["<BOM>"])); }
+    else if (ch === "�") { flush(); out.append(h("span", "ctl", ["<?>"])); }
+    else if (ch < " " && ch !== "\t") {
+      flush();
+      out.append(h("span", "ctl", ["\\x" + ch.charCodeAt(0).toString(16).padStart(2, "0")]));
+    } else plain += ch;
+  }
+  flush();
+  return out;
+}
+
+// Spec prose: `code` spans and [feature-id] cross-references are the only
+// markup that carries meaning.
+function inlineProse(text) {
+  const out = document.createDocumentFragment();
+  const re = /`([^`]+)`|\[([^\]\[]+)\]/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.append(text.slice(last, m.index));
+    const code = m[1], label = m[2], whole = m[0];
+    const jump = code === undefined ? HOOKS.xref(label) : null;
+    if (code !== undefined) out.append(h("code", "", [code]));
+    else if (jump) {
+      const btn = h("button", {class: "xref", type: "button"}, [label]);
+      btn.addEventListener("click", jump);
+      out.append(btn);
+    } else out.append(whole);
+    last = re.lastIndex;
+  }
+  out.append(text.slice(last));
+  return out;
+}
+
+// Blank lines separate blocks, except inside a ``` fence: an example document
+// carries its own blank line (the one before a body) and must survive whole.
+function proseBlocks(text) {
+  const out = [];
+  let cur = [], fence = false;
+  const flush = () => { if (cur.length) out.push({fence: fence, text: cur.join("\n")}); cur = []; };
+  for (const line of String(text || "").split("\n")) {
+    const rule = line.trimStart().startsWith("```");
+    if (rule) {
+      if (fence) { cur.push(line); flush(); fence = false; }   // closed
+      else { flush(); fence = true; cur.push(line); }          // opened
+      continue;
+    }
+    if (!fence && !line.trim()) { flush(); continue; }
+    cur.push(line);
+  }
+  flush(); // an unterminated fence still renders as the example it is
+  return out;
+}
+
+function prose(text) {
+  const out = document.createDocumentFragment();
+  for (const block of proseBlocks(text)) {
+    if (!block.text.trim()) continue;
+    if (block.fence) {
+      out.append(h("pre", "doc", [block.text.replace(/^```[A-Za-z0-9]*\n?/, "").replace(/\n?```\s*$/, "")]));
+    } else {
+      out.append(h("p", "prose", [inlineProse(block.text)]));
+    }
+  }
+  return out;
+}
+
+// The patterns a lane classifies a refusal by. Two places on a page show
+// them — the manifest a report page prints, and the panel of a probe that
+// errored because none of them matched — so what it means for a lane to carry
+// none is worded once.
+function rejectPatternList(driver) {
+  if (!driver) return frag([h("p", "dim", ["rendered without the driver manifest"])]);
+  const pats = driver.rejectPatterns || [];
+  if (!pats.length) return frag([h("p", "dim", ["none — this lane can never classify a refusal"])]);
+  return frag(pats.map(pat => h("p", "dim", ["/" + pat + "/"])));
+}
+
+// The driver classifies a refusal by matching client output against a
+// manifest pattern; that line is the whole verdict.
+function rejectRegex(reason) {
+  const m = (reason || "").match(/matched reject pattern \/([\s\S]*)\/ \(exit/);
+  if (!m) return null;
+  let src = m[1], flags = "";
+  if (src.startsWith("(?i)")) { src = src.slice(4); flags = "i"; } // Go inline flag → JS flag
+  try { return new RegExp(src, flags); } catch (e) { return null; }
+}
+
+// Two long byte strings usually differ in one place. Tint that span so the
+// delta is visible without reading both.
+function diffMark(a, b) {
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  return p + s > 0 ? {p, s} : null; // nothing in common: tinting all of it says nothing
+}
+
+function diffText(text, mark, cls) {
+  if (!mark) return textNode(text);
+  const out = document.createDocumentFragment();
+  const mid = text.slice(mark.p, text.length - mark.s);
+  if (mark.p) out.append(text.slice(0, mark.p));
+  if (mid) out.append(h("span", cls, [mid])); // a pure deletion shows as the other side's tint
+  if (mark.s) out.append(text.slice(text.length - mark.s));
+  return out;
+}
+
+// One failed assertion, as the comparison it made. `expected X, got Y` and
+// `X does not contain Y` are the shapes the t API produces.
+function failRow(c) {
+  const cls = c.tier === "refinement" ? "quirk" : "fail";
+  const val = h("span", "aval", []);
+  const msg = c.msg || "";
+  const once = (t, sep) => { const q = t.split(sep); return q.length === 2 ? q : null; };
+  let m;
+  if (msg.startsWith("expected ") && (m = once(msg.slice(9), ", got "))) {
+    const mark = diffMark(m[0], m[1]);
+    val.append(diffText(m[0], mark, "dx-want"), h("span", "arrow", [" → "]), diffText(m[1], mark, "dx-got"));
+  } else if ((m = once(msg, " does not contain "))) {
+    val.append(m[1], h("span", "arrow", [" ∉ "]), m[0]);
+  } else if (msg === "condition is false (False)") {
+    val.append(h("span", "dim", ["t.true(…) false — see check"]));
+  } else {
+    val.append(msg);
+  }
+  return h("p", "arow", [h("span", "amark " + cls, [cls === "fail" ? "✗" : "~"]),
+    h("span", "aid", [c.spec]), val]);
+}
+
+// One observation, as the reading it is. An observe probe's readings are its
+// whole result, so they sit where a behavioral probe's findings would.
+const obsRow = o => h("p", "arow", [h("span", "amark obs", ["="]),
+  h("span", "aid", [o.spec]), h("span", "aval", [obsWord(o)])]);
+
+// ── the score bar ────────────────────────────────────────────────────────
+
+// score(conforming, graded) -> Element
+// A standing as one figure. The bar carries a verdict, not a temperature:
+// anything short of the whole selection is a client that does not conform to
+// that release, so the colour steps rather than gradates.
+const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+const grade = p => (p === 100 ? "" : p >= 80 ? " p-warn" : " p-bad");
+
+function score(conforming, graded) {
+  if (!graded) return h("span", "no-score", ["—"]);
+  const p = pct(conforming, graded);
+  return h("div", "score", [
+    h("span", "bar" + grade(p), [h("i", {style: "width:" + p + "%"}, [])]),
+    h("span", "pct", [p + "%"]),
+    h("span", "of", [conforming + "/" + graded]),
+  ]);
+}
+
+// ── the release section header ───────────────────────────────────────────
+
+// releaseHead(into, group) -> into
+// What a release section says: the `###` marker, the release's label, the
+// status its manifest carries, and the note that says what the section
+// collects. `group` is one `ReleaseGroup` — {label, status?, note?} — so the
+// words a section is named by are the ones the grouping produced, never a
+// page's own spelling of them.
+//
+// The page owns the element: a table page passes the `th` that spans its grid,
+// a flow page passes its heading, and both get the same head inside it. It is
+// filled, not replaced, so a page may append whatever else its layout puts on
+// that line.
+function releaseHead(into, group) {
+  into.classList.add("rel-head");
+  into.append(h("span", "h", ["### "]), group.label || "");
+  if (group.status) into.append(h("span", "rel-status", [group.status]));
+  if (group.note) into.append(h("span", "rel-note", [group.note]));
+  return into;
+}
+
+// ── the panel: its frame, its placement, its address ─────────────────────
+
+// panelShell(verdict, headParts) -> Element
+// The frame every panel wears: the caret back up at what opened it, the
+// dismiss button, and the `###` head the page fills with its own title parts.
+function panelShell(v, headParts) {
+  const panel = h("div", "panel v-" + v, [h("div", "caret", [])]);
+  const close = h("button", {class: "p-close", type: "button", title: "close (esc)"}, ["✕"]);
+  close.addEventListener("click", () => HOOKS.close());
+  panel.append(close);
+  panel.append(h("p", "p-head", [h("span", "h", ["### "])].concat(headParts)));
+  return panel;
+}
+
+// What a panel needs once it is in the document: a capped output box scrolls
+// itself to the line that decided the state, and the caret points back at
+// whatever opened it. Both read layout, so neither can run before the mount.
+function panelPlaced(panel, anchor) {
+  for (const pre of panel.querySelectorAll("pre")) {
+    const hit = pre.querySelector(".hl");
+    if (hit) pre.scrollTop = Math.max(0, hit.offsetTop - pre.clientHeight / 3);
+  }
+  if (!anchor) return;
+  const br = anchor.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+  panel.style.setProperty("--caret", (br.left - pr.left + br.width / 2) + "px");
+}
+
+// The open panel is what a page's fragment addresses. file:// pages reject
+// history.replaceState in some engines — a deep link is a convenience, never
+// a precondition for the panel working.
+function setHash(fragment) {
+  try {
+    history.replaceState(null, "", fragment ? "#" + fragment : location.pathname + location.search);
+  } catch (e) { /* no addressable URL here; the panel is unaffected */ }
+}
+
+// The assertions that held, named rather than spelled out: a panel explains a
+// result, and what passed is the context for what did not. Null when none did.
+function heldLine(cell) {
+  const held = cell.checks.filter(c => c.pass);
+  if (!held.length) return null;
+  return h("p", "p-state dim", [held.length + " assertion" + (held.length > 1 ? "s" : "") +
+    " held: " + [...new Set(held.map(c => c.spec))].join(" · ")]);
+}
+
+// ── evidence sections ────────────────────────────────────────────────────
+
+// What the client was handed: the document, and any support file placed
+// beside it. Where UTF-8 lost bytes the hexdump is the only place they exist.
+function sectionDoc(p, cell, client) {
+  const d = probeDoc(p.id);
+  const wrap = h("div", "", []);
+  if (!d) {
+    // a corpus was rendered but says nothing about this probe — a different
+    // corpus, not a missing flag
+    wrap.append(h("p", "dim", [hasCorpus() ? "not in the corpus rendered with this report"
+      : "rendered without a corpus"]));
+    return wrap;
+  }
+  wrap.append(h("p", "x-label", [h("span", "dir", [d.document]), " · " + d.source.bytes + " B"]));
+  const pre = h("pre", "doc", []);
+  pre.append(wireText(d.source.text));
+  wrap.append(pre);
+  if (d.source.lossy) wrap.append(h("pre", "doc", [d.source.hex]));
+  for (const f of d.files || []) {
+    wrap.append(h("p", "x-label", [h("span", "dir", [f.path])]));
+    const fp = h("pre", "doc", []);
+    fp.append(wireText(f.bytes.text));
+    wrap.append(fp);
+    if (f.bytes.lossy) wrap.append(h("pre", "doc", [f.bytes.hex]));
+  }
+  return wrap;
+}
+
+// What it put on the wire, exchange by exchange, with the request spans the
+// framer identified tinted.
+function sectionWire(p, cell, client) {
+  const wrap = h("div", "", []);
+  if (!cell.exchanges.length) {
+    wrap.append(h("p", "x-label", [h("span", "dir", ["tx"])]), h("p", "dim", ["nothing sent"]));
+    return wrap;
+  }
+  cell.exchanges.forEach((x, i) => {
+    wrap.append(h("p", "x-label", [h("span", "dir", ["tx " + i]), " · conn " + x.conn]));
+    const tx = h("pre", "wire", []);
+    for (const seg of x.tx) {
+      if (seg.k) { const s = h("span", "k-" + seg.k, []); s.append(wireText(seg.t)); tx.append(s); }
+      else tx.append(wireText(seg.t));
+    }
+    wrap.append(tx);
+    if (x.rx) {
+      wrap.append(h("p", "x-label", [h("span", "dir", ["rx " + i])]));
+      const rx = h("pre", "wire rx", []);
+      rx.append(wireText(x.rx));
+      wrap.append(rx);
+    }
+  });
+  return wrap;
+}
+
+// Handed beside sent — the comparison every graded state is made of.
+const sectionExchange = (p, cell, client) =>
+  h("div", "cols", [sectionDoc(p, cell, client), sectionWire(p, cell, client)]);
+
+// What the client said about it. The line that matched the manifest's reject
+// pattern is the whole verdict on a refusal, so it is marked.
+function sectionOutput(p, cell, client) {
+  const wrap = h("div", "", []);
+  const re = rejectRegex(cell.reason);
+  for (const [name, text] of [["stdout", cell.stdout], ["stderr", cell.stderr]]) {
+    if (!text) continue;
+    wrap.append(h("p", "x-label", [h("span", "dir", [name])]));
+    const pre = h("pre", "out", []);
+    for (const line of text.split("\n")) {
+      if (re && re.test(line)) pre.append(h("span", "hl", [line + "\n"]));
+      else pre.append(line + "\n");
+    }
+    wrap.append(pre);
+  }
+  return wrap;
+}
+
+// An errored result whose reason says no reject pattern matched is the
+// manifest calibration signal — show the patterns that all missed, right here.
+function sectionPatterns(p, cell, client) {
+  const wrap = h("div", "", []);
+  wrap.append(h("p", "x-label", [h("span", "dir", ["reject_patterns"]), " · none matched"]));
+  wrap.append(rejectPatternList(client && client.driver));
+  return wrap;
+}
+
+// The statements the wire was read against. An anchor the spec does not
+// define is drift, and says so rather than rendering as bare text.
+function sectionSpec(p, cell, client) {
+  const wrap = h("div", "", []);
+  for (const anchor of p.spec || []) {
+    const st = specStatement(anchor);
+    const head = h("p", "", [h("span", "aid", [anchor])]);
+    if (st && st.kind) head.append(h("span", "a-kind", ["[" + st.kind + "]"]));
+    else if (hasSpec() && p.class === "observe") head.append(h("span", "a-kind", ["[proposed]"]));
+    wrap.append(head);
+    if (st) wrap.append(prose(st.text));
+    else wrap.append(h("p", "dim", [!hasSpec() ? "rendered without the spec"
+      : p.class === "observe" ? "proposed anchor; the spec defines no statement here"
+      : "no statement with this anchor in the spec"]));
+  }
+  return wrap;
+}
+
+// How the wire was graded, and what the responder served while it was.
+function sectionCheck(p, cell, client) {
+  const d = probeDoc(p.id);
+  const wrap = h("div", "", []);
+  if (!d) return wrap;
+  wrap.append(h("p", "x-label", [h("span", "dir", ["check.star"])]));
+  wrap.append(h("pre", "doc star", [d.check]));
+  if (d.responder === "script") {
+    wrap.append(h("p", "x-label", [h("span", "dir", ["respond.star"])]));
+    wrap.append(h("pre", "doc star", [d.respond || ""]));
+  }
+  for (const f of d.fixtures || []) {
+    const flags = [f.close ? "close" : null, f.halfClose ? "half-close" : null,
+      f.delayMs ? f.delayMs + "ms" : null].filter(Boolean).join(" · ");
+    wrap.append(h("p", "x-label", [h("span", "dir", [f.file]), flags ? " · " + flags : ""]));
+    const pre = h("pre", "wire rx", []);
+    pre.append(wireText(f.bytes.text));
+    wrap.append(pre);
+    // a fixture may carry any octet; where UTF-8 lost them the hexdump is the
+    // only place the served bytes exist
+    if (f.bytes.lossy) wrap.append(h("pre", "doc", [f.bytes.hex]));
+  }
+  if (d.notes) wrap.append(prose(d.notes));
+  return wrap;
+}
+
+// evidenceSections(probe, cell, client) -> Element
+// The evidence block a result's panel stands on, most causal first: client
+// output when the process outcome decided the state (or nothing reached the
+// wire), the reject patterns that all missed when the reason asks for their
+// calibration, then handed-vs-sent, then whatever the framer noted. A page
+// appends the sections it has room for to what comes back.
+function evidenceSections(p, cell, client) {
+  const ev = h("div", "evidence", []);
+  const outputDecided = cell.timedOut || cell.state === "errored" || cell.state === "rejected"
+    || !cell.exchanges.length;
+  if (outputDecided && (cell.stdout || cell.stderr)) ev.append(sectionOutput(p, cell, client));
+  if ((cell.reason || "").includes("no reject pattern matched")) ev.append(sectionPatterns(p, cell, client));
+  ev.append(sectionExchange(p, cell, client));
+  if (cell.notes && cell.notes.length)
+    ev.append(h("ul", "notes", cell.notes.map(n => h("li", "", [n]))));
+  return ev;
+}
+
+// Selection: one open panel, spliced under the row that owns it. The report
+// page and the site's matrix both list results and open one at a time, and
+// the machinery is the same on both — which row is open, how it closes, how
+// the arrows walk the list, how a `#key` fragment opens a row on load, and
+// the scroll that keeps the owning row in view. A page registers its rows
+// and supplies the panel each would open; everything else is here.
+//
+// A row is a button. It may be hidden by whoever filters the page (the
+// `hidden` attribute is the contract — the walk skips hidden rows, and a
+// filter that hides the open row is expected to close it). The panel is
+// placed directly after the button inside a `div.detail` host; the page owns
+// that host's styling — how much air it takes in a flow of rows, how it spans
+// when the rows are table rows — so `.detail` has no rule here, and a page
+// that draws rows declares one (the kit's `results` component does).
+//
+//     selection.register(btn, key, buildPanel)  a row: its button, its hash key, () => panel element
+//     selection.open(btn)                        open that row's panel (closing any other)
+//     selection.close(restoreFocus)              close the open panel, if any
+//     selection.current()                        {key, btn} | null
+//
+// Global names defined here: selection.
+const selection = (() => {
+  const rows = []; // {btn, key, build} in registration order — document order on every page so far
+  let open = null; // {key, btn, host}
+
+  function current() {
+    return open ? {key: open.key, btn: open.btn} : null;
+  }
+
+  function close(restoreFocus) {
+    if (!open) return;
+    open.host.remove();
+    open.btn.classList.remove("selected");
+    open.btn.setAttribute("aria-expanded", "false");
+    const btn = open.btn;
+    open = null;
+    setHash("");
+    if (restoreFocus) btn.focus();
+  }
+
+  function show(btn) {
+    const row = rows.find(r => r.btn === btn);
+    if (!row) return;
+    close(false);
+    const panel = row.build();
+    const host = h("div", "detail", [panel]);
+    btn.after(host);
+    btn.classList.add("selected");
+    btn.setAttribute("aria-expanded", "true");
+    btn.focus(); // WebKit leaves focus on BODY after a button click; the arrows read activeElement
+    open = {key: row.key, btn: btn, host: host};
+    // the caret points at the chip when the row carries one, else at the row
+    panelPlaced(panel, btn.querySelector(".cell") || btn);
+    setHash(row.key);
+    // keep the row that owns the panel visible: the point of opening in place
+    // is that you can still see which row you clicked
+    const br = btn.getBoundingClientRect();
+    if (br.top < 8 || host.getBoundingClientRect().top > window.innerHeight - 140)
+      btn.scrollIntoView({block: "start"});
+  }
+
+  function register(btn, key, build) {
+    rows.push({btn: btn, key: key, build: build});
+    // clicking the open row closes it
+    btn.addEventListener("click", () => (open && open.btn === btn ? close(false) : show(btn)));
+  }
+
+  // ── keyboard: the page is a list, so arrows walk it ────────────────────
+
+  function walk(dir) {
+    const btn = document.activeElement;
+    const visible = rows.filter(r => !r.btn.hidden);
+    const i = visible.findIndex(r => r.btn === btn);
+    if (i < 0) return false;
+    const next = visible[i + dir];
+    if (!next) return true;
+    next.btn.focus();
+    next.btn.scrollIntoView({block: "nearest"});
+    if (open) show(next.btn); // a walk with the panel open keeps it in step
+    return true;
+  }
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") { close(true); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "ArrowDown" && walk(1)) e.preventDefault();
+    else if (e.key === "ArrowUp" && walk(-1)) e.preventDefault();
+  });
+
+  // deep link: #<key> opens that row once every component has registered its rows
+  document.addEventListener("DOMContentLoaded", () => {
+    let key = location.hash.slice(1);
+    // a hand-edited or truncated escape is not a reason to throw; keys are
+    // plain ASCII, so the raw fragment still matches one
+    try { key = decodeURIComponent(key); } catch (e) { /* keep it raw */ }
+    if (!key) return;
+    const row = rows.find(r => r.key === key);
+    if (!row) return;
+    // a reload after a fragment navigation would restore the entry's saved
+    // scroll position after this runs and take the row back out of view; the
+    // fragment names where the reader is going, so that scroll is ours
+    history.scrollRestoration = "manual";
+    show(row.btn);
+    row.btn.scrollIntoView({block: "center"});
+  });
+
+  return {register: register, open: show, close: close, current: current};
+})();
+
+// masthead: the newest run on the site. Like every date on every page here it
+// comes from the reports, never the clock — a site with no submissions at all
+// has no run to name, and says so rather than showing today.
+(() => {
+  const root = document.querySelector('[data-c="masthead"]');
+  root.querySelector(".date").textContent = DATA.generated || "—";
+})();
+
+// versions: a row per client against a column per release. Nothing here
+// opens, filters or folds — the whole page is visible at once, and a reader
+// who wants a probe follows the link to the matrix.
+(() => {
+  const root = document.querySelector('[data-c="versions"]');
+
+  // the bar itself is the shared layer's; the column it stands in is this page's
+  const scoreCell = (s, rest) =>
+    h("td", rest ? "col-rest" : "", [score(s ? s.conforming : 0, s ? s.graded : 0)]);
+
+  function clientRow(c, buckets) {
+    const name = c.name || c.id;
+    const label = c.docs
+      ? h("a", {href: c.docs, text: name, rel: "noopener", target: "_blank"})
+      : textNode(name);
+    const cells = [h("td", null, [label, c.version
+      ? h("span", {class: "cv", text: "  " + c.version})
+      : h("span", {class: "nover", text: "  —"})])];
+    buckets.forEach((b, i) => cells.push(scoreCell(c.scores && c.scores[i], !b.year)));
+    return h("tr", null, cells);
+  }
+
+  // A column is a release section stood on its side, so its head is the shared
+  // one — the same words, in the same order, as the section it links to. What
+  // this page adds under it is the column's own arithmetic.
+  function bucketHead(b, lanes) {
+    const th = releaseHead(h("th", b.year ? "" : "col-rest", []), b);
+    th.append(h("span", {class: "b-sub",
+      text: b.features + (b.features === 1 ? " feature · " : " features · ") + b.probes + " probes"}));
+    if (b.probes) {
+      th.append(h("span", {class: "b-conform",
+        text: b.conform + " of " + lanes + (b.year ? " conform" : " clear it")}));
+    }
+    return th;
+  }
+
+  function versionBlock(v) {
+    const clients = v.clients || [];
+    const buckets = v.buckets || [];
+
+    const head = h("div", "vhead", [
+      h("a", {class: "name", href: "matrix/", text: v.version || "corpus"}),
+      h("span", {class: "grow pin", text:
+        v.probes + " probes · " + clients.length + " clients · kit " + v.kit}),
+      h("a", {href: "matrix/", text: "full matrix →"}),
+    ]);
+
+    let body;
+    if (!clients.length) {
+      body = h("div", {class: "empty", text: "no reports submitted yet"});
+    } else {
+      body = h("div", "tablewrap", [h("table", null, [
+        h("thead", null, [h("tr", null,
+          [h("th", {class: "who", text: "client"})].concat(
+            buckets.map(b => bucketHead(b, clients.length))))]),
+        h("tbody", null, clients.map(c => clientRow(c, buckets))),
+      ])]);
+    }
+    return h("section", "v", [head, body]);
+  }
+
+  for (const v of DATA.versions || []) root.append(versionBlock(v));
+})();
+
+</script>
+</body>
+</html>

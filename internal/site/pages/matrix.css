@@ -1,0 +1,14 @@
+/* The matrix page's geometry: a masthead, the grid, a footer. What a result
+   looks like is the shared evidence layer's and what the grid looks like is
+   the grid's — only the page's own edges are here.
+
+   The grid is as wide as its columns make it, which is not the body measure
+   and not the viewport. It publishes that width as `--matrix-w` on the root
+   element, and the blocks above and below it take the same width so every
+   edge on the page lines up. min() keeps a window narrower than the grid from
+   pushing them past it, and the fallback is what the page looks like in the
+   moment before the grid has measured itself. */
+
+:root { --measure: 1280px; }
+
+header, footer { width: min(100%, calc(var(--matrix-w, 100%) + 2px)); margin-inline: auto; }

@@ -1,0 +1,5 @@
+# The reproducibility check is a byte diff: re-render the site and compare it
+# against what is committed. Git translating line endings on checkout would
+# break that comparison without any input having changed, so nothing here is
+# treated as text to be normalized.
+* -text

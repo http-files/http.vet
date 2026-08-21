@@ -1,0 +1,6 @@
+# The built tool. Everything else here is source or published output: the
+# submitted reports under reports/ are the site's canonical artifact, and the
+# generated pages are committed so a published result can be diffed against
+# the reports it claims to display.
+/wwwvet
+.DS_Store

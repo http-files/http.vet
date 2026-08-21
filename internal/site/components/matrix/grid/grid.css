@@ -1,0 +1,127 @@
+/* grid: probes × clients. What a result looks like — the chip, the panel, the
+   bytes inside it — is the shared evidence layer; what is here is the grid it
+   stands in: fixed columns, release sections, and the observe partition.
+
+   The column widths are this component's, so they are declared on its root
+   rather than on the document. The one measurement that is not — `--matrix-w`,
+   the grid's total width — is published on the document root by grid.js,
+   because the page sets the masthead and footer to the same width and neither
+   is inside this component. */
+
+[data-c="grid"] {
+  /* every client column is the same width, sized to the widest state word
+     (unsupported) and client id (httprunner); a longer id scales down to fit
+     rather than widening its column */
+  --probe-col: 322px;
+  --client-col: 104px;
+  --head-h: 68px; /* sticky thead depth, remeasured after render */
+  --stick: calc(var(--head-h) + 8px);
+
+  /* The wrapper deliberately does not scroll — a scroll container would become
+     the sticky header's scrollport, and the header must pin to the viewport as
+     the page scrolls. Wide pages scroll the document instead. */
+  width: max-content; margin-inline: auto;
+  border: 1px solid var(--line); background: var(--panel);
+}
+
+/* fixed layout needs a non-auto width to engage; the width is probe + n × client */
+table { border-collapse: collapse; table-layout: fixed; width: var(--matrix-w); }
+col.probe { width: var(--probe-col); }
+col.client { width: var(--client-col); }
+
+.cid { display: block; width: max-content; }
+/* the only outbound links on the page: a column head opens that client's own
+   guide to the format. Styled as the id it already was — the dotted underline
+   on hover is the same "this is clickable" idiom as .plabel and .linkish. */
+a.cid { color: inherit; text-decoration: none; }
+a.cid:hover { text-decoration: underline dotted; }
+a.cid:focus-visible { outline: 1.5px solid var(--text); outline-offset: 2px; }
+
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--panel-2);
+  text-align: left; font-weight: 500; vertical-align: top;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+thead th:first-child { left: 0; z-index: 4; }
+thead .cv { display: block; color: var(--muted); font-weight: 400; font-size: 11px; white-space: nowrap; }
+tbody th { text-align: left; font-weight: 400; padding: 7px 10px; white-space: nowrap; }
+/* the label column stays legible when a narrow window scrolls the page sideways */
+tbody tr.probe th, tbody tr.feature th, tbody tr.summary th {
+  position: sticky; left: 0; z-index: 1; background: var(--panel);
+}
+tr.probe, tr.feature, tr.detail { scroll-margin-top: var(--stick); }
+tr.probe:hover td, tr.probe:hover th { background: var(--panel-2); }
+tr.probe th.sub { padding-left: 24px; color: var(--muted); font-weight: 400; }
+tr.probe th .tag, tr.feature th .tag {
+  color: var(--muted); border: 1px solid var(--line);
+  font-size: 10px; padding: 0 5px; margin-left: 8px; border-radius: 2px;
+  vertical-align: 1px;
+}
+/* the probe id opens the probe itself — its document, fixture, assertions */
+.plabel {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0;
+  cursor: pointer; text-align: left; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plabel:hover, .plabel.selected { color: var(--text); text-decoration: underline dotted; }
+.plabel:focus-visible { outline: 1.5px solid var(--text); outline-offset: 2px; }
+td { padding: 5px 4px; }
+td.absent { color: var(--faint); padding-left: 22px; }
+
+/* release sections and feature aggregate rows — the head itself is the shared
+   .rel-head; what a table adds is the space it stands in */
+tr.release th { padding-top: 24px; padding-bottom: 2px; }
+tr.summary th { color: var(--muted); font-size: 11px; font-weight: 400; border-bottom: 1px solid var(--line); }
+tr.summary td { border-bottom: 1px solid var(--line); }
+tr.feature th { font-weight: 500; padding-top: 10px; }
+tr.feature td { padding-top: 10px; }
+tr.feature:hover td, tr.feature:hover th { background: var(--panel-2); }
+tr.flash th, tr.flash td { background: rgba(127,176,232,.18); }
+
+.cell { vertical-align: bottom; }
+/* the fold outweighs its parts: feature and release cells fill the column,
+   probe cells hug their word */
+tr.feature .cell, tr.summary .cell { display: block; width: 100%; }
+
+/* An observe row's colour is its partition, not a verdict — the chip machinery
+   reads --v, so a case supplies one from the group ramp and everything else
+   about the chip stays as it is. */
+.cell.og0 { --v: var(--g0); } .cell.og1 { --v: var(--g1); }
+.cell.og2 { --v: var(--g2); } .cell.og3 { --v: var(--g3); }
+.cell.og4 { --v: var(--g4); } .cell.og5 { --v: var(--g5); }
+.cell.og6 { --v: var(--g6); } .cell.og7 { --v: var(--g7); }
+
+/* the cases behind the colours, in the panel where the explaining belongs */
+.cases { margin: 8px 0 2px; }
+.cases .crow { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
+.cases .cdot { flex: none; width: 7px; height: 7px; border-radius: 2px; background: var(--g, var(--faint)); }
+.cases .cval { color: var(--text); }
+.cases .clanes { color: var(--muted); margin-left: auto; padding-left: 14px; }
+.cases .crow.me .cval { color: var(--g, var(--text)); }
+.cases .crow.me .clanes { color: var(--text); }
+.cases .crow.none .cdot { background: none; border: 1px solid var(--line); }
+.cases .crow.none .cval { color: var(--muted); }
+
+/* ── inline detail: a row spliced under the cell that opened it ──────────── */
+
+tr.detail > td { padding: 0; }
+
+/* roll-up table inside a feature or release panel */
+table.rollup { width: 100%; border-collapse: collapse; table-layout: auto; margin-top: 8px; }
+table.rollup td { padding: 2px 8px 2px 0; vertical-align: top; }
+table.rollup td.pid { white-space: nowrap; }
+table.rollup .why { color: var(--muted); font-size: 12px; }
+/* a roll-up lists its parts as plain chips — only the probe id beside one
+   opens anything, so nothing else may look selectable */
+table.rollup .cell { cursor: default; }
+.linkish {
+  font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--text); text-align: left;
+}
+.linkish:hover { text-decoration: underline dotted; }
+
+@media (prefers-reduced-motion: no-preference) {
+  tr.flash th, tr.flash td { transition: background .3s ease; }
+}

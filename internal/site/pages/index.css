@@ -1,0 +1,17 @@
+/* The root page's own layout: a masthead, the lede that says what the columns
+   mean, and a block per corpus version. What a score looks like is the shared
+   styles'; what a version block looks like is that component's. */
+
+/* fewer columns than any other page here, and spreading them apart only makes
+   a row harder to read across */
+:root { --measure: 1120px; }
+
+.lede { color: var(--muted); margin-bottom: 16px; max-width: 74ch; }
+.lede b { color: var(--text); font-weight: 500; }
+.lede:last-of-type { margin-bottom: 30px; }
+
+footer { border-top: 1px solid var(--line); padding-top: 12px; }
+
+@media (max-width: 900px) {
+  body { padding: 20px 14px 48px; }
+}
